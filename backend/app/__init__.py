@@ -1,1 +1,1 @@
-"""Application services shared by the future API and worker."""
+"""DocParse API, persistence and document-processing application."""
