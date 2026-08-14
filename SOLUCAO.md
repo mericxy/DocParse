@@ -3,17 +3,25 @@
 ## Estado atual
 
 O projeto usa um único pipeline de documentos com extratores específicos para
-cartão de ponto e holerite. Neste momento estão implementadas e testadas a
-leitura de PDF, a escolha automática entre texto nativo e OCR, a representação
-intermediária com geometria e os dois extratores.
-
-FastAPI, persistência, revisão, exportação, frontend e empacotamento Docker
-fazem parte da arquitetura escolhida, mas ainda não foram implementados nesta
-fase. Essa distinção é intencional: este documento registra tanto o que existe
-quanto as decisões que orientam as próximas etapas, sem apresentar trabalho
-planejado como concluído.
+cartão de ponto e holerite. Estão implementados e testados a leitura híbrida de
+PDF, os dois extratores, a API FastAPI, a fila persistida em SQLite, o worker
+separado, a interface React de revisão, a correção do JSON e os downloads XLSX,
+CSV e JSON. O empacotamento Docker com frontend, backend e worker também está
+implementado e validado; a publicação em uma plataforma externa ainda depende
+da escolha do provedor e de credenciais do usuário.
 
 ## Como executar o que já está implementado
+
+O caminho recomendado, sem depender de Python, Node ou Tesseract instalados no
+host além do próprio Docker, é:
+
+```bash
+docker compose up --build
+```
+
+A interface fica em `http://localhost:8080`. `docker compose down` encerra os
+serviços preservando o volume; `docker compose down -v` também apaga banco e
+PDFs. O arquivo `.env.example` lista todas as opções do Compose.
 
 Requisitos de sistema:
 
@@ -39,23 +47,121 @@ cartao = extract_cartao_ponto("arquivo.pdf")
 holerite = extract_holerite("arquivo.pdf")
 ```
 
+Execução do ciclo HTTP e do worker, em dois terminais com o ambiente virtual
+ativado:
+
+```bash
+# terminal 1
+uvicorn backend.app.main:app --reload
+
+# terminal 2
+python -m backend.worker
+```
+
+Instalação e execução do frontend em um terceiro terminal:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+O Vite abre por padrão em `http://127.0.0.1:5173` e encaminha `/api` e
+`/healthz` para a API local em `http://127.0.0.1:8000`. Assim, o desenvolvimento
+local permanece same-origin e não exige ampliar o backend com CORS nesta fase.
+
+Por padrão, banco e uploads são criados em `./data/`, diretório ignorado pelo
+Git. A configuração operacional aceita:
+
+```text
+DATABASE_URL=sqlite:///./data/transcricoes.db
+UPLOAD_DIR=./data/uploads
+MAX_UPLOAD_SIZE_MB=10
+JOB_STALE_AFTER_MINUTES=30
+WORKER_POLL_INTERVAL_SECONDS=1
+RETENTION_HOURS=24
+```
+
 ## Stack escolhida
 
 | Área | Escolha | Situação |
 |---|---|---|
-| Backend | Python, FastAPI e Pydantic | FastAPI planejado; extratores em Python implementados |
+| Backend | Python, FastAPI e Pydantic | Implementado |
 | PDF | PyMuPDF | Implementado |
 | OCR | Tesseract por meio do PyMuPDF | Implementado |
-| Persistência | SQLAlchemy e SQLite em modo WAL | Planejado |
-| Assíncrono | Worker Python separado e fila no SQLite | Arquivo reservado; processamento planejado |
-| Exportação | openpyxl, CSV e JSON nativos | Planejado |
-| Frontend | React, TypeScript e Vite | Planejado |
-| Deploy | Docker Compose com frontend, backend e worker | Planejado |
+| Persistência | SQLAlchemy síncrono e SQLite em modo WAL | Implementado |
+| Assíncrono | Worker Python separado e fila no SQLite | Implementado |
+| Exportação | openpyxl, CSV e JSON nativos | Implementado |
+| Frontend | React, TypeScript e Vite | Implementado |
+| Deploy | Docker Compose com frontend, backend e worker | Implementado localmente; publicação pendente |
 
 PyMuPDF foi escolhido porque fornece texto, palavras, bounding boxes e OCR na
-mesma API. Tesseract é local, não envia PII para terceiros e é suficiente para
-os documentos impressos dos exemplos. A contrapartida é menor qualidade em
-manuscritos e imagens degradadas.
+mesma API. A escolha e as limitações do Tesseract estão detalhadas na seção de
+OCR.
+
+## Docker
+
+O Compose possui três serviços:
+
+```text
+frontend (Nginx, porta 8080)
+  -> /api e /healthz
+backend (FastAPI/Uvicorn, porta 8000 apenas no loopback do host)
+  -> volume docparse_data:/data
+worker (mesma imagem Python e outro comando)
+  -> volume docparse_data:/data
+```
+
+Backend e worker usam literalmente a mesma imagem. O primeiro executa Uvicorn;
+o segundo troca apenas o comando para `python -m backend.worker`. Ambos recebem
+`DATABASE_URL=sqlite:////data/transcricoes.db` e `UPLOAD_DIR=/data/uploads`,
+portanto não existem bancos ou diretórios de upload isolados por container. O
+volume nomeado sobrevive a restart, recreate e `docker compose down` sem `-v`.
+
+A imagem Python usa Python 3.12 slim e instala Tesseract, `por` e `eng` pelo
+gerenciador do sistema. Somente `backend/requirements.txt` entra na imagem;
+pytest e httpx permanecem dependências de desenvolvimento. A imagem do
+frontend usa Node 22 somente no estágio de build e copia o `dist` para Nginx.
+O Vite não é executado em produção.
+
+O frontend usa caminhos relativos. Nginx serve a SPA e encaminha `/api/*` e
+`/healthz` ao serviço `backend` na rede privada do Compose. Isso mantém a
+aplicação same-origin e evita liberar CORS. O limite do Nginx é configurado por
+`NGINX_CLIENT_MAX_BODY_SIZE`, com default `11m` para permitir o multipart de um
+PDF cujo limite de aplicação é 10 MB. Ao aumentar `MAX_UPLOAD_SIZE_MB`, esse
+limite do proxy também precisa ser revisto.
+
+O healthcheck do backend consulta apenas `/healthz`; o frontend só inicia após
+a API ficar saudável. O worker também espera a API saudável, sem `sleep`
+arbitrário. `.dockerignore` exclui ambientes virtuais, dependências locais,
+artefatos, dados persistidos, exemplos e `.env` do contexto das imagens.
+
+### Validação do Compose
+
+O build sem cache foi executado a partir de contexto limpo. O ciclo real pelo
+proxy Nginx confirmou:
+
+- frontend e health com HTTP 200;
+- `time-card-01.pdf`: 202, worker, 5 páginas e 153 dias;
+- `payroll-04.pdf`: 202, OCR no container, 5 blocos e 42 fields;
+- PUT refletido no GET, JSON e XLSX para os dois tipos;
+- Tesseract 5.3 com `por`, `eng` e `osd` disponíveis;
+- jobs e correções preservados após restart/recreate de backend e worker;
+- `RETENTION_HOURS`, banco e upload idênticos nos dois processos.
+
+## Deploy
+
+Nenhuma plataforma está definida no repositório, portanto não foi criada uma
+configuração fictícia nem foram solicitadas credenciais. A plataforma escolhida
+precisa aceitar containers, um processo web e um worker, rede privada entre os
+serviços e um volume persistente montado simultaneamente nos dois processos
+Python. Uma plataforma que aceite Docker Compose diretamente é o encaixe mais
+simples.
+
+SQLite e os PDFs dependem desse filesystem compartilhado. Plataformas com disco
+efêmero ou volumes isolados por instância podem perder jobs após restart ou
+impedir que o worker abra o PDF salvo pela API. Isso é uma limitação operacional
+real; esta fase não migra dados para PostgreSQL/S3 apenas para contorná-la.
 
 ## Arquitetura do pipeline
 
@@ -91,10 +197,11 @@ depender de coordenadas dos PDFs de exemplo.
 
 ## Processamento assíncrono e persistência
 
-A arquitetura escolhe um worker Python separado, em vez de executar OCR e
-parsing durante a requisição HTTP. O upload deve apenas validar, persistir e
-enfileirar. O worker consulta e reivindica jobs persistidos no SQLite, processa
-o PDF e grava o resultado ou o erro.
+A arquitetura usa um worker Python separado, em vez de executar OCR e parsing
+durante a requisição HTTP. O upload valida em chunks, confirma o PDF com magic
+bytes e PyMuPDF, salva com UUID e cria o job; nenhum extrator é importado ou
+executado pela rota de upload. O worker consulta e reivindica jobs persistidos
+no SQLite, processa o PDF e grava o resultado ou erro em outra transação curta.
 
 SQLite em modo WAL é suficiente para o volume e o escopo do desafio, mantém a
 fila após reinicializações e evita a operação adicional de Redis, RabbitMQ e
@@ -105,7 +212,160 @@ O PDF original fica no filesystem; estado do job e JSON revisável ficam no
 SQLite. O JSON é a fonte da exportação, para que correções feitas na revisão
 cheguem à planilha.
 
-## Detecção de texto e OCR
+O claim é um único `UPDATE ... RETURNING`, condicionado a
+`status = processando` e a `started_at` vazio ou vencido. Assim, dois workers
+não selecionam normalmente o mesmo job. A recuperação de job zumbi usa o
+timeout configurável `JOB_STALE_AFTER_MINUTES`: é deliberadamente simples e
+pode duplicar processamento se uma extração legítima durar mais que esse
+limite. A gravação final também confere o `started_at` do claim, impedindo que
+um worker antigo sobrescreva o resultado de uma recuperação posterior.
+
+SQLite usa `journal_mode=WAL`, `busy_timeout` e transações curtas. A sessão do
+claim é encerrada antes de PyMuPDF/Tesseract e uma nova sessão é aberta somente
+para persistir o resultado. Para a carga do desafio isso evita a complexidade
+operacional de Redis/Celery; alta concorrência continua sendo um limite
+consciente.
+
+## API e exportação
+
+A API implementa o contrato literal `POST /api/transcricoes`,
+`GET/PUT /api/transcricoes/{id}`, download em
+`GET /api/transcricoes/{id}/planilha` e `GET /healthz`. O `PUT` substitui o
+`value` inteiro depois de validá-lo com o schema Pydantic do tipo persistido;
+XLSX, CSV e JSON sempre usam esse valor corrigido e não reexecutam o extrator.
+
+Os exports são montados em memória. No cartão, a largura vem do maior número de
+batidas, dias vazios permanecem e as células usam `time_hhmm`; a leitura
+literal `time_raw` continua preservada no JSON de auditoria. No holerite,
+labels de `fields` viram colunas
+na ordem da primeira aparição; `bases` não contaminam essa matriz. O XLSX usa
+cabeçalho `#173772`, avisos amarelos `#FFF3CD`, avisos de sequência vermelhos
+`#F8D7DA` e borda esquerda `#DC3545`; vermelho prevalece quando duas regras se
+aplicam. Avisos são derivados no download, nunca persistidos no JSON.
+
+O contrato tabular do holerite é ambíguo quando a mesma entrada de `pages[]`
+contém mais de um field com o mesmo `label`: uma única coluna não consegue
+representar valores diferentes sem descartar ocorrências. A política escolhida
+é explícita e conservadora. JSON continua disponível e preserva todos os
+fields; CSV e XLSX retornam `409 Conflict` com orientação para usar JSON. Não se
+concatena valores numa célula nem se escolhe silenciosamente a primeira ou a
+última ocorrência, pois ambas as alternativas fariam uma correção parecer
+exportada quando não foi. Essa situação existe em blocos reais de
+`payroll-01` e `payroll-02`.
+
+## Interface de revisão
+
+O frontend é uma aplicação React/TypeScript única para os dois documentos.
+Upload, feedback de estado, polling, visualização do PDF, estado dirty, salvar e
+download são compartilhados. Apenas a matriz editável é específica: dias e
+batidas para cartão; competências, fields e bases para holerite.
+
+O PDF usa `URL.createObjectURL(file)` sobre o `File` selecionado. Essa foi a
+alternativa de menor escopo: não exige endpoint para devolver PII, não expõe
+caminho interno e cumpre o fluxo upload → revisão na mesma sessão. A limitação
+consciente é que um refresh perde a referência local ao PDF e a tela não tenta
+retomar um job apenas pelo ID. Como visualizadores nativos podem não renderizar
+o blob em alguns navegadores integrados, a tela também oferece um link simples
+para abrir o mesmo PDF local em nova aba; não foi adicionada uma dependência
+pesada como PDF.js.
+
+Após o `POST 202`, existe um único loop cancelável de polling. Ele consulta o
+GET enquanto o status é `processando`, para imediatamente em `concluido` ou
+`erro` e aborta requisições/timers ao desmontar ou iniciar outro documento. O
+feedback é indeterminado; nenhum percentual artificial é exibido.
+
+O `value` retornado é clonado para um draft editável. Warnings continuam fora
+do contrato e são recalculados em renderização com as mesmas regras e cores do
+XLSX. Um `PUT` explícito substitui o value inteiro. Downloads ficam desabilitados
+enquanto o draft está dirty, evitando baixar silenciosamente a versão anterior;
+depois de salvar, XLSX, CSV e JSON usam o valor persistido.
+
+No cartão, editar a data altera somente `date_raw`. Ao editar um horário,
+`time_raw` recebe literalmente o texto digitado. `time_hhmm` reaproveita apenas
+as transformações inequívocas da regra do backend: zero à esquerda, separador e
+marcadores comprovados `+`, `c` e `d`. Incerteza permanece e componentes
+impossíveis viram `?`; texto fora do formato é preservado, não corrigido.
+Batidas podem ser acrescentadas ao fim, alternando IN/OUT, ou removidas somente
+do fim, preservando a ordem.
+
+No holerite, `month`, `year`, os quatro atributos de cada field (`code`,
+`label`, `reference`, `value`) e pares label/value de bases são editáveis como
+strings. A edição detalhada identifica o field pelo índice original, não pelo
+label. `bases` aparecem numa seção expansível separada e nunca
+viram colunas de verba. A inspeção dos PDFs reais encontrou labels repetidos no
+mesmo bloco em `payroll-01` e `payroll-02`; por isso uma célula pode conter
+múltiplos editores identificados por código/referência. Cada editor atualiza o
+field pelo índice original, sem sobrescrever o registro com label igual. A UI
+avisa que esses blocos precisam de JSON para uma exportação sem perda.
+
+Cartões com páginas cujo `days[]` está vazio continuam com status concluído,
+mas cada página ganha uma linha amarela “nenhum dia extraído”. Se todas as
+páginas estiverem vazias, um aviso de alto nível explica que nenhuma linha foi
+transcrita com segurança e que o download refletirá esse resultado vazio.
+Nenhum warning é adicionado ao JSON.
+
+## OCR
+
+### Ferramenta
+
+O OCR usa Tesseract local por meio de `page.get_textpage_ocr()` do PyMuPDF, com
+idiomas `por+eng`, 300 DPI e `full=True`. O aplicativo não precisa gerar PNGs
+temporários: o PyMuPDF rasteriza a página e integra o resultado do Tesseract em
+uma `TextPage`, da qual são extraídas as mesmas palavras e bounding boxes do
+caminho com texto nativo.
+
+`full=True` é intencional. Quando o OCR é acionado, a camada existente já foi
+classificada como ausente ou lixo e não deve ser misturada ao texto
+reconhecido.
+
+### Motivos da escolha
+
+- operação simples e integração direta com a representação já usada pelo
+  leitor;
+- custo de licença e de uso zero;
+- nenhuma API externa, chave ou segredo;
+- nenhuma dependência de disponibilidade ou limite de um serviço cloud;
+- maior privacidade para PDFs com nome, CPF, salário e jornada;
+- compatibilidade com execução em worker e instalação em imagem Docker.
+
+O processamento é local ao processo Python e não realiza chamadas de rede. Na
+arquitetura completa ele será executado no worker, mantendo os documentos
+dentro do ambiente controlado. Isso reduz exposição de PII e facilita uma
+operação isolada de serviços externos; não substitui os demais controles de
+LGPD, retenção e acesso.
+
+### Dependências do host
+
+Além do pacote Python PyMuPDF, o host precisa do executável Tesseract e dos
+dados de idioma português e inglês. Exemplos de instalação:
+
+```bash
+# Debian/Ubuntu
+apt-get install tesseract-ocr tesseract-ocr-por tesseract-ocr-eng
+
+# macOS com Homebrew
+brew install tesseract tesseract-lang
+```
+
+A instalação pode ser conferida com:
+
+```bash
+tesseract --version
+tesseract --list-langs
+```
+
+A imagem Docker instala essas dependências de sistema explicitamente; não
+basta declarar PyMuPDF em `requirements.txt`.
+
+### Pipeline
+
+```text
+texto embedded
+  -> validação de texto útil por página
+  -> OCR local somente quando necessário
+  -> PdfPage / PdfWord / BoundingBox
+  -> mesmo extrator específico
+```
 
 Cada página tenta primeiro a camada nativa. Uma camada é útil quando possui ao
 menos quatro tokens alfanuméricos e vinte caracteres alfanuméricos. Camadas
@@ -121,6 +381,34 @@ palavras como “Entrada”, “Verba” ou “Salário”.
 Caracteres não reconhecidos não são completados por probabilidade. Quando a
 incerteza pode ser localizada, ela é representada com `?`. Não existem
 substituições globais como `O -> 0` ou `I -> 1`.
+
+### Limitações
+
+- Tesseract é imperfeito em imagens degradadas, inclinadas, manuscritas ou com
+  grades fortes; aumentar indiscriminadamente os 300 DPI eleva custo sem
+  resolver essas classes de problema.
+- O caminho atual recebe a camada textual produzida pelo PyMuPDF, mas não uma
+  confiança confiável por caractere. `PdfWord.confidence` permanece `None`; um
+  score não é fabricado.
+- `\ufffd` é convertido em `?`, e validações estruturais conseguem marcar como
+  incertos alguns componentes impossíveis. Porém, se o Tesseract produzir um
+  caractere errado e plausível, sem erro de Unicode e dentro do formato
+  esperado, ele pode passar sem ser detectado.
+- Os dados `por` e `eng` precisam estar instalados no sistema. Quando Tesseract
+  ou os idiomas faltam, o pipeline encerra com `OcrError`, mensagem sanitizada
+  e encadeamento da exceção original, sem incluir texto ou PII do documento.
+- Não há correção global de caracteres, OCR especializado em manuscrito nem
+  serviço cloud como fallback.
+
+No recibo OCR de `payroll-04`, a inspeção geométrica mostrou uma falha mais
+específica: labels impressos começam alinhados ao cabeçalho da coluna, mas o
+primeiro token reconhecido de linhas como `DSR COMISSAO` aparece 4–5 pontos à
+direita quando a primeira letra se perde junto à grade vertical. O parser de
+recibo agora deriva o início e a largura de um glifo do próprio cabeçalho e,
+somente quando esse deslocamento ocorre em palavra OCR, prefixa `?`. Ele não
+inventa a letra: `SR COMISSAO` vira `?SR COMISSAO`. Labels alinhados como
+`SALARIO` e `INSS MES` não recebem `?`. Se uma seção não possui âncora
+geométrica equivalente, a omissão plausível continua sem correção automática.
 
 ## Decisões do cartão de ponto
 
@@ -140,6 +428,9 @@ substituições globais como `O -> 0` ou `I -> 1`.
 - A continuação de uma linha exige adjacência e geometria compatível. Igualdade
   de data, sozinha, não autoriza mesclar registros.
 - Páginas, dias e punches nunca são ordenados por data ou horário.
+- Datas compostas somente pelo dia (`01`, `02`, ...) são comparadas apenas
+  dentro da mesma página física. Não se infere mês/ano e não se compara a
+  virada entre páginas.
 
 ## Decisões do holerite
 
@@ -161,6 +452,9 @@ substituições globais como `O -> 0` ou `I -> 1`.
   mesma página.
 - Nomes de mês degradados pelo OCR geram `month: "??"`; a competência não é
   inventada a partir das páginas vizinhas.
+- Competências consecutivas idênticas representam blocos adicionais possíveis
+  (por exemplo MÊS/ACERTO) e não geram warning. A próxima competência distinta
+  é comparada com a última legível distinta.
 
 ## Política de retenção e privacidade
 
@@ -170,16 +464,13 @@ Durante esse período serão mantidos:
 
 - PDF original no filesystem;
 - estado do job e JSON da transcrição no SQLite;
-- arquivos de exportação eventualmente gerados.
 
-Após 24 horas, um processo de limpeza deve remover arquivo original,
-exportações e registros associados. Logs permanentes não devem conter nome,
+Os arquivos de exportação são gerados em memória e não são retidos. Após 24
+horas, o worker remove o PDF original e o registro associado; arquivo já
+ausente não interrompe a limpeza. Logs permanentes não devem conter nome,
 CPF, matrícula, texto integral ou valores do documento. Diagnósticos usam
-somente identificador técnico, página, fonte (`embedded`/`ocr`), contagens,
-status, duração e erro sanitizado.
-
-Essa política está definida, mas a rotina de persistência e limpeza ainda será
-implementada junto da API e do worker.
+somente identificador técnico, tipo, status, tamanho, duração, contagens e tipo
+da exceção. O nome original do upload não é persistido nem registrado.
 
 ## Testes escolhidos
 
@@ -196,9 +487,33 @@ Os testes protegem comportamentos que já falharam ou que alterariam o contrato:
 - páginas vazias, múltiplos blocos, códigos iniciados por `/`, OCR e
   deduplicação de vias;
 - regressão real impedindo `REMUNERAÇÃOMES` e `DIAS/HORASTRAB` em `fields`.
+- upload em chunks, validação real de PDF e garantia de que o `POST` não chama
+  extratores;
+- estados públicos, validação e substituição do `value`, inclusive a correção
+  chegando ao download;
+- claim atômico, recuperação de job zumbi, erro sanitizado e retenção;
+- transposição CSV/XLSX, ordem de aparição e todas as prioridades de avisos.
+- polling encerrando em sucesso/erro e cancelamento do ciclo compartilhado;
+- regras de warning no frontend, inclusive vermelho prevalecendo sobre amarelo;
+- edição literal de horário e dinheiro, labels repetidos e bases separadas;
+- estado dirty bloqueando download até o PUT e payload sem flags derivadas.
+- recusa explícita de CSV/XLSX diante de labels repetidos na mesma linha, com
+  JSON preservando todas as ocorrências;
+- sequência day-only por página e competências repetidas legítimas;
+- edição de `code`, `label`, `reference` e `value` pelo índice do field;
+- representação explícita de todas as páginas de cartão com `days: []`;
+- marcação geométrica conservadora das omissões de primeiro caractere no
+  recibo OCR, sem falsos `?` em labels alinhados.
 
 Além das fixtures pequenas, os extratores foram executados e inspecionados nos
 oito PDFs de cartão de ponto e holerite presentes em `exemplos/`.
+
+Na validação integrada da Fase 5, `time-card-01`, `time-card-02`, `payroll-03`
+e `payroll-04` percorreram API e worker reais. Uma correção por PUT foi
+confirmada no GET, no JSON e no XLSX. O upload/polling também foi exercitado
+pelo proxy do Vite. O conector de navegador da sessão não inicializou; por isso
+a interface ainda precisa de auditoria visual independente em navegador real,
+especialmente para tabelas largas, viewer nativo de PDF e layout responsivo.
 
 ## Limitações e cortes conscientes
 
@@ -212,9 +527,10 @@ grade, pré-processamento de imagem ou OCR especializado em manuscrito.
 
 ### OCR imperfeito
 
-No `payroll-04`, texto e valores impressos são extraídos, mas alguns labels
-perdem caracteres e quatro competências permanecem com mês `??`. O texto lido
-é preservado em vez de “corrigido” por aproximação léxica.
+No `payroll-04`, a omissão inicial detectável na tabela/total recebe `?`, mas
+alguns labels de bases sem âncora equivalente ainda podem perder caracteres, e
+quatro competências permanecem com mês `??`. Não há correção por aproximação
+léxica.
 
 ### Fallback sem cabeçalho
 
@@ -232,9 +548,17 @@ heurística genérica e evitar OCR indevidamente.
 
 ### Funcionalidades ainda fora desta fase
 
-API completa, fila persistente, revisão, banco, exportação, frontend e Docker
-não foram antecipados durante as fases de extração. Eles continuam necessários
-para fechar o ciclo completo descrito no desafio.
+O Docker Compose está implementado e validado localmente. Falta escolher uma
+plataforma compatível, fornecer credenciais e publicar/testar a URL em sessão
+anônima. API, fila, persistência, frontend de revisão, correção e exportação já
+estão implementados.
+
+### Retomada após refresh
+
+A interface conserva o PDF somente no blob local da sessão atual. Recarregar a
+página perde PDF, job e draft. Um endpoint autenticado de recuperação do PDF e
+persistência segura do ID seriam necessários para retomada, mas aumentariam o
+escopo e a superfície de exposição de PII.
 
 ## O que quebra primeiro em produção
 

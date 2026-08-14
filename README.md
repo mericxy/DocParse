@@ -250,6 +250,26 @@ Não precisa de login nem de design elaborado. Precisa ser honesta sobre o que a
 - Configuração por variável de ambiente. Nenhum segredo no repositório.
 - CI mínima (lint + testes) é diferencial.
 
+## Execução desta solução com Docker
+
+Na raiz do repositório:
+
+```bash
+docker compose up --build
+```
+
+A aplicação fica disponível em `http://localhost:8080`. O Compose inicia o
+frontend Nginx, a API FastAPI e o worker, sem comandos adicionais. Para parar:
+
+```bash
+docker compose down
+```
+
+Banco e PDFs ficam no volume nomeado `docparse_data`; `docker compose down`
+preserva esse volume. Use `docker compose down -v` somente quando quiser apagar
+deliberadamente todas as transcrições e uploads. Variáveis e defaults seguros
+para o Compose estão em `.env.example`.
+
 # Segurança e privacidade
 
 Você vai colocar na internet um endpoint público que recebe documento com nome, CPF, matrícula, salário e jornada de pessoas reais:
