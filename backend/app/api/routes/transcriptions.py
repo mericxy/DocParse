@@ -19,7 +19,7 @@ from ...schemas import (
     ValueUpdate,
     validate_transcription_value,
 )
-from ...services.export import AmbiguousPayrollExportError, export_transcription
+from ...services.export import export_transcription
 from ...services.uploads import InvalidPdfError, UploadTooLargeError, save_validated_pdf
 from ..dependencies import get_session, get_settings
 
@@ -157,10 +157,7 @@ def download_transcription(
         raise HTTPException(status_code=409, detail="A transcrição não possui resultado.")
 
     value = validate_transcription_value(transcription.tipo, transcription.value)
-    try:
-        exported = export_transcription(transcription.tipo, formato, value)
-    except AmbiguousPayrollExportError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    exported = export_transcription(transcription.tipo, formato, value)
     generated_name = f"transcricao-{transcription.id}.{exported.extension}"
     return Response(
         content=exported.content,

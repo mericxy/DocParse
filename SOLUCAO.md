@@ -244,14 +244,18 @@ cabeçalho `#173772`, avisos amarelos `#FFF3CD`, avisos de sequência vermelhos
 aplicam. Avisos são derivados no download, nunca persistidos no JSON.
 
 O contrato tabular do holerite é ambíguo quando a mesma entrada de `pages[]`
-contém mais de um field com o mesmo `label`: uma única coluna não consegue
-representar valores diferentes sem descartar ocorrências. A política escolhida
-é explícita e conservadora. JSON continua disponível e preserva todos os
-fields; CSV e XLSX retornam `409 Conflict` com orientação para usar JSON. Não se
-concatena valores numa célula nem se escolhe silenciosamente a primeira ou a
-última ocorrência, pois ambas as alternativas fariam uma correção parecer
-exportada quando não foi. Essa situação existe em blocos reais de
-`payroll-01` e `payroll-02`.
+contém mais de um field com o mesmo `label`. A matriz resolve essa ambiguidade
+com uma identidade derivada `(label, ocorrência naquela entrada)`: a primeira
+ocorrência usa o cabeçalho original, e as seguintes usam `(2)`, `(3)` etc.
+Assim, `INSS`, `INSS`, `IRRF` vira `INSS`, `INSS (2)`, `IRRF`. A união dessas
+identidades continua seguindo a primeira aparição no documento, e uma linha que
+não possui determinada ocorrência recebe célula vazia.
+
+Essa numeração existe somente em CSV/XLSX. O JSON persistido e baixado permanece
+literal: nenhum `field.label` é reescrito e nenhum metadado de ocorrência é
+adicionado. A estratégia preserva todos os valores, permite os três formatos,
+evita concatenação e descarte silencioso e acomoda a ambiguidade observada em
+blocos reais de `payroll-01` e `payroll-02`.
 
 ## Interface de revisão
 
@@ -296,7 +300,8 @@ viram colunas de verba. A inspeção dos PDFs reais encontrou labels repetidos n
 mesmo bloco em `payroll-01` e `payroll-02`; por isso uma célula pode conter
 múltiplos editores identificados por código/referência. Cada editor atualiza o
 field pelo índice original, sem sobrescrever o registro com label igual. A UI
-avisa que esses blocos precisam de JSON para uma exportação sem perda.
+informa, sem bloquear downloads, que CSV e XLSX representarão as ocorrências
+em colunas adicionais como `INSS (2)`.
 
 Cartões com páginas cujo `days[]` está vazio continuam com status concluído,
 mas cada página ganha uma linha amarela “nenhum dia extraído”. Se todas as
@@ -497,8 +502,8 @@ Os testes protegem comportamentos que já falharam ou que alterariam o contrato:
 - regras de warning no frontend, inclusive vermelho prevalecendo sobre amarelo;
 - edição literal de horário e dinheiro, labels repetidos e bases separadas;
 - estado dirty bloqueando download até o PUT e payload sem flags derivadas.
-- recusa explícita de CSV/XLSX diante de labels repetidos na mesma linha, com
-  JSON preservando todas as ocorrências;
+- colunas de ocorrência para labels repetidos, inclusive união entre linhas e
+  correção da segunda ocorrência chegando a JSON, CSV e XLSX;
 - sequência day-only por página e competências repetidas legítimas;
 - edição de `code`, `label`, `reference` e `value` pelo índice do field;
 - representação explícita de todas as páginas de cartão com `days: []`;

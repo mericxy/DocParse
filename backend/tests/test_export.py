@@ -5,9 +5,8 @@ from io import BytesIO, StringIO
 import json
 
 from openpyxl import load_workbook
-import pytest
 
-from backend.app.services.export import AmbiguousPayrollExportError, export_transcription
+from backend.app.services.export import export_transcription
 from backend.app.services.export.tables import build_cartao_table, build_holerite_table
 
 
@@ -189,7 +188,7 @@ def test_holerite_repeated_competences_are_additional_blocks_not_sequence_breaks
     ]
 
 
-def test_holerite_csv_and_xlsx_refuse_duplicate_labels_in_one_logical_row():
+def test_holerite_repeated_labels_get_occurrence_columns_without_losing_values():
     value = {
         "pages": [
             _holerite_page(
@@ -197,19 +196,53 @@ def test_holerite_csv_and_xlsx_refuse_duplicate_labels_in_one_logical_row():
                 "2017",
                 "12",
                 fields=[
-                    _field("419 13º. Adto Desc", "100,00"),
-                    _field("419 13º. Adto Desc", "9.999,99"),
+                    _field("A", "1"),
+                    _field("B", "2"),
+                    _field("B", "3"),
+                    _field("C", "4"),
                 ],
             )
         ]
     }
 
-    for formato in ("csv", "xlsx"):
-        with pytest.raises(AmbiguousPayrollExportError, match="label repetido"):
-            export_transcription("holerite", formato, value)
+    table = build_holerite_table(value)
 
-    exported = export_transcription("holerite", "json", value)
-    assert json.loads(exported.content)["pages"][0]["fields"] == value["pages"][0]["fields"]
+    assert table.headers == ["Pág.", "Mês", "Ano", "A", "B", "B (2)", "C"]
+    assert table.rows == [[2, "12", "2017", "1", "2", "3", "4"]]
+
+
+def test_holerite_occurrence_columns_are_unioned_in_first_appearance_order():
+    value = {
+        "pages": [
+            _holerite_page(
+                1,
+                "2025",
+                "01",
+                fields=[_field("A", "a1"), _field("B", "b1"), _field("B", "b2")],
+            ),
+            _holerite_page(
+                2,
+                "2025",
+                "02",
+                fields=[_field("A", "a2"), _field("B", "b3")],
+            ),
+            _holerite_page(
+                3,
+                "2025",
+                "03",
+                fields=[_field("B", "b4"), _field("B", "b5"), _field("B", "b6")],
+            ),
+        ]
+    }
+
+    table = build_holerite_table(value)
+
+    assert table.headers == ["Pág.", "Mês", "Ano", "A", "B", "B (2)", "B (3)"]
+    assert table.rows == [
+        [1, "01", "2025", "a1", "b1", "b2", ""],
+        [2, "02", "2025", "a2", "b3", "", ""],
+        [3, "03", "2025", "", "b4", "b5", "b6"],
+    ]
 
 
 def test_xlsx_uses_required_header_and_warning_styles():

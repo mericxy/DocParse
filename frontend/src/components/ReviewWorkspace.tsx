@@ -56,8 +56,8 @@ function documentWarnings(type: DocumentType, value: TranscriptionValue): RowWar
       });
     });
     if (hasRepeatedLabels) {
-      addReason("Há verbas repetidas na mesma competência.");
-      addReason("O JSON preserva todas as ocorrências. CSV e XLSX serão recusados porque uma única coluna por label não consegue representá-las sem perder valores.");
+      addReason("Verbas repetidas detectadas.");
+      addReason('CSV e XLSX usarão colunas adicionais, como "INSS (2)", para preservar todas as ocorrências.');
     }
     for (const row of payrollReviewRows(payroll)) {
       row.warning.reasons.forEach(addReason);

@@ -104,13 +104,18 @@ it("places document warnings as an icon beside the data panel actions", () => {
   );
 
   expect(screen.queryByText("Verbas repetidas")).not.toBeInTheDocument();
-  const warning = screen.getByLabelText(/Há verbas repetidas na mesma competência/);
+  const warning = screen.getByLabelText(/Verbas repetidas detectadas/);
   expect(warning.closest(".panel-actions")).toBeInTheDocument();
   expect(warning).toHaveTextContent("⚠");
   expect(screen.getByRole("button", { name: "Ocultar dados" })).toBeInTheDocument();
   const tooltip = within(warning).getByRole("tooltip");
-  expect(tooltip).toHaveTextContent("CSV e XLSX serão recusados");
+  expect(tooltip).toHaveTextContent(
+    'CSV e XLSX usarão colunas adicionais, como "INSS (2)"',
+  );
   expect(tooltip).toHaveTextContent("Contém caracteres incertos (?)");
+  expect(screen.getByRole("button", { name: "Baixar XLSX" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "Baixar CSV" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "Baixar JSON" })).toBeEnabled();
 });
 
 it("uses the compact header and the requested author-only footer", () => {

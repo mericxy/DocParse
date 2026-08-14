@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import csv
 from datetime import datetime, UTC
-from io import StringIO
+from io import BytesIO, StringIO
 
+from openpyxl import load_workbook
 from sqlalchemy import select
 
 from backend.app.db.models import Transcription
@@ -230,8 +231,8 @@ def test_download_conflicts_until_job_is_completed(client):
     assert client.get("/api/transcricoes/pending/planilha?formato=pdf").status_code == 422
 
 
-def test_tabular_download_refuses_ambiguous_repeated_payroll_labels(client):
-    value = {
+def test_corrected_repeated_payroll_field_reaches_json_csv_and_xlsx(client):
+    original = {
         "pages": [
             {
                 "page": 2,
@@ -239,26 +240,68 @@ def test_tabular_download_refuses_ambiguous_repeated_payroll_labels(client):
                 "month": "12",
                 "fields": [
                     {"code": "419", "label": "13º. Adto Desc", "reference": "", "value": "100,00"},
-                    {"code": "419", "label": "13º. Adto Desc", "reference": "", "value": "9.999,99"},
+                    {"code": "419", "label": "13º. Adto Desc", "reference": "", "value": "200,00"},
                 ],
                 "bases": [],
             }
         ]
     }
-    _insert_job(client, job_id="duplicate-fields", tipo="holerite", status="concluido", value=value)
+    _insert_job(
+        client,
+        job_id="duplicate-fields",
+        tipo="holerite",
+        status="concluido",
+        value=original,
+    )
+    corrected = {
+        "pages": [
+            {
+                **original["pages"][0],
+                "fields": [
+                    original["pages"][0]["fields"][0],
+                    {
+                        **original["pages"][0]["fields"][1],
+                        "value": "9.999,99",
+                    },
+                ],
+            }
+        ]
+    }
 
-    for formato in ("csv", "xlsx"):
-        response = client.get(
-            f"/api/transcricoes/duplicate-fields/planilha?formato={formato}"
-        )
-        assert response.status_code == 409
-        assert "JSON" in response.json()["detail"]
+    put = client.put("/api/transcricoes/duplicate-fields", json={"value": corrected})
+    assert put.status_code == 200
+    assert client.get("/api/transcricoes/duplicate-fields").json()["value"] == corrected
 
     json_response = client.get(
         "/api/transcricoes/duplicate-fields/planilha?formato=json"
     )
     assert json_response.status_code == 200
-    assert json_response.json() == value
+    assert json_response.json() == corrected
+
+    csv_response = client.get(
+        "/api/transcricoes/duplicate-fields/planilha?formato=csv"
+    )
+    assert csv_response.status_code == 200
+    csv_rows = list(csv.reader(StringIO(csv_response.content.decode("utf-8"))))
+    assert csv_rows == [
+        ["Pág.", "Mês", "Ano", "13º. Adto Desc", "13º. Adto Desc (2)"],
+        ["2", "12", "2017", "100,00", "9.999,99"],
+    ]
+
+    xlsx_response = client.get(
+        "/api/transcricoes/duplicate-fields/planilha?formato=xlsx"
+    )
+    assert xlsx_response.status_code == 200
+    worksheet = load_workbook(BytesIO(xlsx_response.content)).active
+    assert [cell.value for cell in worksheet[1]] == [
+        "Pág.",
+        "Mês",
+        "Ano",
+        "13º. Adto Desc",
+        "13º. Adto Desc (2)",
+    ]
+    assert worksheet.cell(row=2, column=4).value == "100,00"
+    assert worksheet.cell(row=2, column=5).value == "9.999,99"
 
 
 def test_healthz_checks_database(client):

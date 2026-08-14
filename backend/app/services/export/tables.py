@@ -22,10 +22,6 @@ _DATE_RE = re.compile(r"^([0-9]{1,2})([/.-])([0-9]{1,2})\2([0-9]{2,4})$")
 _DAY_ONLY_RE = re.compile(r"^([0-9]{1,2})$")
 
 
-class AmbiguousPayrollExportError(ValueError):
-    """Raised when the fixed label matrix would silently lose a field."""
-
-
 def _contains_question(value: Any) -> bool:
     if isinstance(value, str):
         return "?" in value
@@ -121,40 +117,57 @@ def _next_competence(competence: tuple[int, int]) -> tuple[int, int]:
     return (year + 1, 1) if month == 12 else (year, month + 1)
 
 
-def build_holerite_table(value: dict[str, Any]) -> ExportTable:
-    labels: list[str] = []
-    seen_labels: set[str] = set()
-    for page in value["pages"]:
-        page_labels: set[str] = set()
-        for field in page["fields"]:
-            label = field["label"]
-            if label in page_labels:
-                raise AmbiguousPayrollExportError(
-                    "Não é possível gerar CSV/XLSX porque uma linha contém "
-                    "verbas com label repetido. Use JSON para preservar todas "
-                    "as ocorrências."
-                )
-            page_labels.add(label)
-            if label not in seen_labels:
-                seen_labels.add(label)
-                labels.append(label)
+PayrollColumn = tuple[str, int]
 
-    headers = ["Pág.", "Mês", "Ano", *labels]
+
+def _payroll_field_occurrences(
+    fields: list[dict[str, Any]],
+) -> list[tuple[PayrollColumn, dict[str, Any]]]:
+    """Identify fields by label and their 1-based occurrence in this row."""
+    counts: dict[str, int] = {}
+    occurrences: list[tuple[PayrollColumn, dict[str, Any]]] = []
+    for field in fields:
+        label = field["label"]
+        occurrence = counts.get(label, 0) + 1
+        counts[label] = occurrence
+        occurrences.append(((label, occurrence), field))
+    return occurrences
+
+
+def _payroll_column_header(column: PayrollColumn) -> str:
+    label, occurrence = column
+    return label if occurrence == 1 else f"{label} ({occurrence})"
+
+
+def build_holerite_table(value: dict[str, Any]) -> ExportTable:
+    columns: list[PayrollColumn] = []
+    seen_columns: set[PayrollColumn] = set()
+    for page in value["pages"]:
+        for column, _ in _payroll_field_occurrences(page["fields"]):
+            if column not in seen_columns:
+                seen_columns.add(column)
+                columns.append(column)
+
+    headers = [
+        "Pág.",
+        "Mês",
+        "Ano",
+        *(_payroll_column_header(column) for column in columns),
+    ]
     rows: list[list[str | int]] = []
     warnings: list[Warning] = []
     previous_legible: tuple[int, int] | None = None
     for page in value["pages"]:
-        field_values: dict[str, str] = {}
-        for field in page["fields"]:
-            # Duplicate labels in this logical row were rejected above, so
-            # this assignment is now one-to-one and cannot hide an occurrence.
-            field_values[field["label"]] = field["value"]
+        field_values = {
+            column: field["value"]
+            for column, field in _payroll_field_occurrences(page["fields"])
+        }
         rows.append(
             [
                 page["page"],
                 page["month"],
                 page["year"],
-                *(field_values.get(label, "") for label in labels),
+                *(field_values.get(column, "") for column in columns),
             ]
         )
 
