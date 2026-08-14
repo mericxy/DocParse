@@ -4,6 +4,11 @@
   "private": true,
   "type": "module",
   "description": "Desafio técnico da Quick Filler: transcrição de cartões de ponto e holerites em PDF para planilha, com aplicação web publicada",
+  "scripts": {
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build:frontend": "npm --prefix frontend run build",
+    "test:frontend": "npm --prefix frontend test"
+  },
   "engines": {
     "node": ">=22"
   },

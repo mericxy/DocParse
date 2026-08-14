@@ -1,11 +1,17 @@
 # Saídas geradas pela aplicação
 output/
+data/
+tmp/debug/
 
 # Ferramentas internas de correção (não publicar)
 avaliacao/
 
 # Dependências
 node_modules/
+dist/
+*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
 venv/
 env/
 __pycache__/
