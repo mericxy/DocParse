@@ -1,0 +1,58 @@
+x-backend-environment: &backend-environment
+  DATABASE_URL: ${DATABASE_URL:-sqlite:////data/transcricoes.db}
+  UPLOAD_DIR: ${UPLOAD_DIR:-/data/uploads}
+  MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-10}
+  JOB_STALE_AFTER_MINUTES: ${JOB_STALE_AFTER_MINUTES:-30}
+  WORKER_POLL_INTERVAL_SECONDS: ${WORKER_POLL_INTERVAL_SECONDS:-1}
+  RETENTION_HOURS: ${RETENTION_HOURS:-24}
+  CLEANUP_INTERVAL_SECONDS: ${CLEANUP_INTERVAL_SECONDS:-300}
+  SQLITE_BUSY_TIMEOUT_MS: ${SQLITE_BUSY_TIMEOUT_MS:-5000}
+  UPLOAD_CHUNK_SIZE_BYTES: ${UPLOAD_CHUNK_SIZE_BYTES:-65536}
+
+x-backend-volumes: &backend-volumes
+  - docparse_data:/data
+
+services:
+  backend:
+    image: docparse-backend:local
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    environment: *backend-environment
+    volumes: *backend-volumes
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8000/healthz"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+
+  worker:
+    image: docparse-backend:local
+    restart: unless-stopped
+    environment: *backend-environment
+    volumes: *backend-volumes
+    command: ["python", "-m", "backend.worker"]
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  frontend:
+    image: docparse-frontend:local
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    restart: unless-stopped
+    environment:
+      NGINX_CLIENT_MAX_BODY_SIZE: ${NGINX_CLIENT_MAX_BODY_SIZE:-11m}
+    ports:
+      - "${FRONTEND_PORT:-8088}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  docparse_data:
