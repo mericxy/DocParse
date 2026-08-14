@@ -134,7 +134,9 @@ limite do proxy também precisa ser revisto.
 O healthcheck do backend consulta apenas `/healthz`; o frontend só inicia após
 a API ficar saudável. O worker também espera a API saudável, sem `sleep`
 arbitrário. `.dockerignore` exclui ambientes virtuais, dependências locais,
-artefatos, dados persistidos, exemplos e `.env` do contexto das imagens.
+artefatos, dados persistidos e `.env`. Os PDFs de `exemplos/` permanecem no
+contexto porque o build do frontend os incorpora deliberadamente como assets
+de demonstração; nenhuma imagem copia o restante do repositório por esse motivo.
 
 ### Validação do Compose
 
@@ -283,6 +285,24 @@ do contrato e são recalculados em renderização com as mesmas regras e cores d
 XLSX. Um `PUT` explícito substitui o value inteiro. Downloads ficam desabilitados
 enquanto o draft está dirty, evitando baixar silenciosamente a versão anterior;
 depois de salvar, XLSX, CSV e JSON usam o valor persistido.
+
+### Documentos de exemplo
+
+A tela de upload oferece, como opção secundária, os oito PDFs versionados em
+`exemplos/`. Essa pasta continua sendo a única fonte versionada. Antes de
+`npm run dev` e `npm run build`, um script copia somente os nomes conhecidos
+para `frontend/public/examples/`, diretório gerado e ignorado pelo Git. No
+Docker, a raiz do repositório já é o contexto de build; o Dockerfile copia
+`exemplos/` para a etapa Node, e o mesmo script produz `/examples/*.pdf` dentro
+do `dist` servido pelo Nginx. Não existe caminho absoluto nem bind mount do host.
+
+O navegador busca o asset estático uma vez, rejeita resposta vazia ou sem MIME
+PDF e cria um `File` com o nome original. Seleção manual e exemplo convergem no
+mesmo estado `file` e na mesma função `createTranscription`; portanto ambos usam
+o POST multipart, validação, persistência, worker, extração e revisão existentes.
+O prefixo do exemplo define automaticamente `cartao-ponto` ou `holerite`, mas a
+seleção não dispara processamento sem a confirmação do usuário. O mesmo `File`
+alimenta upload, blob do viewer e abertura em nova guia.
 
 No cartão, editar a data altera somente `date_raw`. Ao editar um horário,
 `time_raw` recebe literalmente o texto digitado. `time_hhmm` reaproveita apenas

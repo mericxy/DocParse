@@ -1,13 +1,17 @@
 import type { FormEvent } from "react";
 
+import { EXAMPLE_GROUPS, type ExampleDocument } from "../examples/documents";
 import type { DocumentType } from "../types/transcription";
 
 interface UploadPanelProps {
   file: File | null;
   type: DocumentType;
   busy: boolean;
+  loadingExample: string | null;
+  selectedExample: ExampleDocument | null;
   error: string | null;
   onFile: (file: File | null) => void;
+  onExample: (example: ExampleDocument) => void;
   onType: (type: DocumentType) => void;
   onSubmit: () => void;
 }
@@ -16,8 +20,11 @@ export function UploadPanel({
   file,
   type,
   busy,
+  loadingExample,
+  selectedExample,
   error,
   onFile,
+  onExample,
   onType,
   onSubmit,
 }: UploadPanelProps) {
@@ -86,7 +93,11 @@ export function UploadPanel({
           {file ? (
             <span className="file-copy">
               <strong>{file.name}</strong>
-              <small>{(file.size / 1024 / 1024).toFixed(2)} MB · clique para trocar</small>
+              <small>
+                {selectedExample
+                  ? `${selectedExample.label} · exemplo incluído no projeto · clique para trocar`
+                  : `${(file.size / 1024 / 1024).toFixed(2)} MB · clique para trocar`}
+              </small>
             </span>
           ) : (
             <span className="file-copy">
@@ -95,6 +106,33 @@ export function UploadPanel({
             </span>
           )}
         </label>
+
+        <div className="example-divider" aria-hidden="true"><span>ou</span></div>
+        <details className="example-picker">
+          <summary>Testar com um exemplo</summary>
+          <div className="example-groups">
+            {EXAMPLE_GROUPS.map((group) => (
+              <section key={group.type} aria-labelledby={`examples-${group.type}`}>
+                <h3 id={`examples-${group.type}`}>{group.label}</h3>
+                <div className="example-options">
+                  {group.documents.map((example) => (
+                    <button
+                      className={selectedExample?.filename === example.filename ? "example-option selected" : "example-option"}
+                      disabled={busy || loadingExample !== null}
+                      key={example.filename}
+                      onClick={() => onExample(example)}
+                      type="button"
+                    >
+                      <span>{example.label}</span>
+                      <small>{example.filename}</small>
+                      {loadingExample === example.filename && <span className="visually-hidden">Carregando</span>}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        </details>
 
         {error && <div className="message error-message" role="alert">{error}</div>}
 

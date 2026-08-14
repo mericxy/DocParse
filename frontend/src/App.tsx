@@ -10,6 +10,10 @@ import {
 import { ProcessingView } from "./components/ProcessingView";
 import { ReviewWorkspace } from "./components/ReviewWorkspace";
 import { UploadPanel } from "./components/UploadPanel";
+import {
+  loadExampleDocument,
+  type ExampleDocument,
+} from "./examples/documents";
 import type {
   DocumentType,
   ExportFormat,
@@ -37,6 +41,8 @@ function saveBlob(blob: Blob, filename: string) {
 export default function App() {
   const [type, setType] = useState<DocumentType>("cartao-ponto");
   const [file, setFile] = useState<File | null>(null);
+  const [selectedExample, setSelectedExample] = useState<ExampleDocument | null>(null);
+  const [loadingExample, setLoadingExample] = useState<string | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [view, setView] = useState<ViewState>("upload");
   const [jobId, setJobId] = useState<string | null>(null);
@@ -47,10 +53,12 @@ export default function App() {
   const [downloading, setDownloading] = useState<ExportFormat | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const requestController = useRef<AbortController | null>(null);
+  const exampleController = useRef<AbortController | null>(null);
 
   useEffect(() => {
     return () => {
       requestController.current?.abort();
+      exampleController.current?.abort();
     };
   }, []);
 
@@ -64,6 +72,40 @@ export default function App() {
     setFile(nextFile);
     setError(null);
     setPdfUrl(nextFile ? URL.createObjectURL(nextFile) : null);
+  }
+
+  function selectLocalFile(nextFile: File | null) {
+    exampleController.current?.abort();
+    setLoadingExample(null);
+    setSelectedExample(null);
+    selectFile(nextFile);
+  }
+
+  function selectType(nextType: DocumentType) {
+    if (selectedExample && selectedExample.type !== nextType) {
+      setSelectedExample(null);
+      selectFile(null);
+    }
+    setType(nextType);
+  }
+
+  async function selectExample(example: ExampleDocument) {
+    exampleController.current?.abort();
+    const controller = new AbortController();
+    exampleController.current = controller;
+    setLoadingExample(example.filename);
+    setError(null);
+    try {
+      const exampleFile = await loadExampleDocument(example, controller.signal);
+      setType(example.type);
+      setSelectedExample(example);
+      selectFile(exampleFile);
+    } catch (caught) {
+      if (caught instanceof DOMException && caught.name === "AbortError") return;
+      setError(publicError(caught));
+    } finally {
+      if (exampleController.current === controller) setLoadingExample(null);
+    }
   }
 
   async function submit() {
@@ -144,7 +186,10 @@ export default function App() {
   function startOver() {
     if (dirty && !window.confirm("Descartar as alterações ainda não salvas?")) return;
     requestController.current?.abort();
+    exampleController.current?.abort();
     setFile(null);
+    setSelectedExample(null);
+    setLoadingExample(null);
     setPdfUrl(null);
     setJobId(null);
     setDraft(null);
@@ -175,9 +220,12 @@ export default function App() {
             file={file}
             type={type}
             busy={view === "sending"}
+            loadingExample={loadingExample}
+            selectedExample={selectedExample}
             error={error}
-            onFile={selectFile}
-            onType={setType}
+            onFile={selectLocalFile}
+            onExample={selectExample}
+            onType={selectType}
             onSubmit={submit}
           />
         )}
