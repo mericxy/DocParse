@@ -173,6 +173,54 @@ def test_put_replacement_is_used_by_subsequent_download(client, cartao_value):
     assert "8:00" not in download.text
 
 
+def test_put_and_json_download_preserve_all_four_corrected_payroll_field_strings(client):
+    original = {
+        "pages": [
+            {
+                "page": 1,
+                "year": "2025",
+                "month": "01",
+                "fields": [
+                    {"code": "001", "label": "ALARIO", "reference": "220,00", "value": "1.000,00"}
+                ],
+                "bases": [],
+            }
+        ]
+    }
+    _insert_job(
+        client,
+        job_id="payroll-editable",
+        tipo="holerite",
+        status="concluido",
+        value=original,
+    )
+    corrected = {
+        "pages": [
+            {
+                **original["pages"][0],
+                "fields": [
+                    {
+                        "code": "009",
+                        "label": "SALÁRIO CORRIGIDO",
+                        "reference": "200,00",
+                        "value": "9.999,99",
+                    }
+                ],
+            }
+        ]
+    }
+
+    put = client.put("/api/transcricoes/payroll-editable", json={"value": corrected})
+    assert put.status_code == 200
+    assert put.json()["value"] == corrected
+    assert client.get("/api/transcricoes/payroll-editable").json()["value"] == corrected
+    downloaded = client.get(
+        "/api/transcricoes/payroll-editable/planilha?formato=json"
+    )
+    assert downloaded.status_code == 200
+    assert downloaded.json() == corrected
+
+
 def test_download_conflicts_until_job_is_completed(client):
     assert client.get("/api/transcricoes/missing/planilha?formato=json").status_code == 404
     _insert_job(client, job_id="pending", tipo="holerite", status="processando")
@@ -180,6 +228,37 @@ def test_download_conflicts_until_job_is_completed(client):
     assert client.get("/api/transcricoes/pending/planilha?formato=json").status_code == 409
     assert client.get("/api/transcricoes/failed/planilha?formato=json").status_code == 409
     assert client.get("/api/transcricoes/pending/planilha?formato=pdf").status_code == 422
+
+
+def test_tabular_download_refuses_ambiguous_repeated_payroll_labels(client):
+    value = {
+        "pages": [
+            {
+                "page": 2,
+                "year": "2017",
+                "month": "12",
+                "fields": [
+                    {"code": "419", "label": "13º. Adto Desc", "reference": "", "value": "100,00"},
+                    {"code": "419", "label": "13º. Adto Desc", "reference": "", "value": "9.999,99"},
+                ],
+                "bases": [],
+            }
+        ]
+    }
+    _insert_job(client, job_id="duplicate-fields", tipo="holerite", status="concluido", value=value)
+
+    for formato in ("csv", "xlsx"):
+        response = client.get(
+            f"/api/transcricoes/duplicate-fields/planilha?formato={formato}"
+        )
+        assert response.status_code == 409
+        assert "JSON" in response.json()["detail"]
+
+    json_response = client.get(
+        "/api/transcricoes/duplicate-fields/planilha?formato=json"
+    )
+    assert json_response.status_code == 200
+    assert json_response.json() == value
 
 
 def test_healthz_checks_database(client):

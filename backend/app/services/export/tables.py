@@ -19,6 +19,11 @@ class ExportTable:
 
 
 _DATE_RE = re.compile(r"^([0-9]{1,2})([/.-])([0-9]{1,2})\2([0-9]{2,4})$")
+_DAY_ONLY_RE = re.compile(r"^([0-9]{1,2})$")
+
+
+class AmbiguousPayrollExportError(ValueError):
+    """Raised when the fixed label matrix would silently lose a field."""
 
 
 def _contains_question(value: Any) -> bool:
@@ -43,6 +48,14 @@ def _read_date(raw: str) -> date | None:
         return None
 
 
+def _read_day_only(raw: str) -> int | None:
+    match = _DAY_ONLY_RE.fullmatch(raw)
+    if match is None:
+        return None
+    day = int(match.group(1))
+    return day if 1 <= day <= 31 else None
+
+
 def build_cartao_table(value: dict[str, Any]) -> ExportTable:
     days = [day for page in value["pages"] for day in page["days"]]
     max_punches = max((len(day["punches"]) for day in days), default=0)
@@ -55,22 +68,39 @@ def build_cartao_table(value: dict[str, Any]) -> ExportTable:
     warnings: list[Warning] = []
     previous_legible: date | None = None
     punch_columns = pair_count * 2
-    for day in days:
-        # The spreadsheet is the normalized operational view. The literal
-        # reading remains available in JSON as time_raw for audit/review.
-        times = [punch["time_hhmm"] for punch in day["punches"]]
-        rows.append([day["date_raw"], *times, *([""] * (punch_columns - len(times)))])
+    for page in value["pages"]:
+        # A day-only date has no month/year context, so its chain is local to
+        # the physical page. Full dates retain the document-wide chain.
+        previous_day_only: int | None = None
+        for day in page["days"]:
+            # The spreadsheet is the normalized operational view. The literal
+            # reading remains available in JSON as time_raw for audit/review.
+            times = [punch["time_hhmm"] for punch in day["punches"]]
+            rows.append(
+                [day["date_raw"], *times, *([""] * (punch_columns - len(times)))]
+            )
 
-        current = _read_date(day["date_raw"])
-        non_sequential = (
-            current is not None
-            and previous_legible is not None
-            and current != previous_legible + timedelta(days=1)
-        )
-        yellow = len(day["punches"]) % 2 != 0 or _contains_question(day)
-        warnings.append("red" if non_sequential else "yellow" if yellow else "none")
-        if current is not None:
-            previous_legible = current
+            current = _read_date(day["date_raw"])
+            current_day_only = _read_day_only(day["date_raw"])
+            non_sequential_full = (
+                current is not None
+                and previous_legible is not None
+                and current != previous_legible + timedelta(days=1)
+            )
+            non_sequential_day_only = (
+                current_day_only is not None
+                and previous_day_only is not None
+                and current_day_only != previous_day_only + 1
+            )
+            non_sequential = non_sequential_full or non_sequential_day_only
+            yellow = len(day["punches"]) % 2 != 0 or _contains_question(day)
+            warnings.append(
+                "red" if non_sequential else "yellow" if yellow else "none"
+            )
+            if current is not None:
+                previous_legible = current
+            if current_day_only is not None:
+                previous_day_only = current_day_only
 
     return ExportTable(headers, rows, warnings)
 
@@ -95,8 +125,16 @@ def build_holerite_table(value: dict[str, Any]) -> ExportTable:
     labels: list[str] = []
     seen_labels: set[str] = set()
     for page in value["pages"]:
+        page_labels: set[str] = set()
         for field in page["fields"]:
             label = field["label"]
+            if label in page_labels:
+                raise AmbiguousPayrollExportError(
+                    "Não é possível gerar CSV/XLSX porque uma linha contém "
+                    "verbas com label repetido. Use JSON para preservar todas "
+                    "as ocorrências."
+                )
+            page_labels.add(label)
             if label not in seen_labels:
                 seen_labels.add(label)
                 labels.append(label)
@@ -108,7 +146,9 @@ def build_holerite_table(value: dict[str, Any]) -> ExportTable:
     for page in value["pages"]:
         field_values: dict[str, str] = {}
         for field in page["fields"]:
-            field_values.setdefault(field["label"], field["value"])
+            # Duplicate labels in this logical row were rejected above, so
+            # this assignment is now one-to-one and cannot hide an occurrence.
+            field_values[field["label"]] = field["value"]
         rows.append(
             [
                 page["page"],
@@ -119,15 +159,17 @@ def build_holerite_table(value: dict[str, Any]) -> ExportTable:
         )
 
         current = _read_competence(page)
+        repeated = current is not None and current == previous_legible
         non_sequential = (
             current is not None
             and previous_legible is not None
+            and not repeated
             and current != _next_competence(previous_legible)
         )
         empty = not page["fields"] and not page["bases"]
         yellow = empty or _contains_question(page)
         warnings.append("red" if non_sequential else "yellow" if yellow else "none")
-        if current is not None:
+        if current is not None and not repeated:
             previous_legible = current
 
     return ExportTable(headers, rows, warnings)

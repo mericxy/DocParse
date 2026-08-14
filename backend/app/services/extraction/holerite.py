@@ -88,6 +88,14 @@ class _FiveColumns:
     provents_discounts: float
 
 
+@dataclass(frozen=True, slots=True)
+class _ReceiptColumns:
+    label_start: float
+    label_reference: float
+    reference_value: float
+    missing_prefix_tolerance: float
+
+
 def _semantic_text(value: str) -> str:
     decomposed = unicodedata.normalize("NFKD", value)
     without_accents = "".join(
@@ -634,7 +642,7 @@ def _parse_sap(page: PdfPage, lines: list[_Line]) -> list[dict[str, Any]]:
     return [_result_page(page.number, year, month, fields, bases)]
 
 
-def _receipt_side_columns(header_words: list[PdfWord]) -> tuple[float, float] | None:
+def _receipt_side_columns(header_words: list[PdfWord]) -> _ReceiptColumns | None:
     description = next(
         (word for word in header_words if _semantic_text(word.text) == "descricao"),
         None,
@@ -653,38 +661,86 @@ def _receipt_side_columns(header_words: list[PdfWord]) -> tuple[float, float] | 
     # right-aligned, so their glyphs can begin left of the centered "Valor"
     # header; the midpoint between quantity and value headings is the safe band
     # separator.
-    return quantity.bbox.x0, _boundary(quantity, value)
+    average_header_character_width = (
+        (description.bbox.x1 - description.bbox.x0) / max(len(description.text), 1)
+    )
+    return _ReceiptColumns(
+        label_start=description.bbox.x0,
+        label_reference=quantity.bbox.x0,
+        reference_value=_boundary(quantity, value),
+        # Receipt labels are flush with the description header / table edge.
+        # A shift wider than almost one header glyph is evidence that
+        # Tesseract lost the first glyph beside the vertical grid line. The
+        # missing character itself remains unknown and is represented by '?'.
+        missing_prefix_tolerance=max(1.0, average_header_character_width * 0.9),
+    )
+
+
+def _receipt_prefix_is_missing(
+    first_word: PdfWord, columns: _ReceiptColumns
+) -> bool:
+    return (
+        first_word.source == "ocr"
+        and first_word.bbox.x0 - columns.label_start
+        > columns.missing_prefix_tolerance
+    )
+
+
+def _mark_receipt_prefix(
+    label: str, label_words: list[PdfWord], columns: _ReceiptColumns
+) -> str:
+    if label_words and _receipt_prefix_is_missing(label_words[0], columns):
+        return f"?{label}"
+    return label
 
 
 def _receipt_field(
-    words: list[PdfWord], columns: tuple[float, float]
+    words: list[PdfWord], columns: _ReceiptColumns
 ) -> dict[str, str] | None:
-    label_reference, reference_value = columns
     value_candidates = [
         (word, value)
         for word in words
-        if word.bbox.center_x >= reference_value
+        if word.bbox.center_x >= columns.reference_value
         if (value := _money(word)) is not None
     ]
     if not value_candidates:
         return None
     value_word, value = value_candidates[-1]
-    label = " ".join(
-        word.text for word in words if word.bbox.center_x < label_reference
-    ).strip()
+    label_words = [
+        word for word in words if word.bbox.center_x < columns.label_reference
+    ]
+    label = " ".join(word.text for word in label_words).strip()
     reference = " ".join(
         word.text
         for word in words
-        if label_reference <= word.bbox.center_x < reference_value
+        if columns.label_reference <= word.bbox.center_x < columns.reference_value
         and word is not value_word
     ).strip()
     if not label:
         return None
+    label = _mark_receipt_prefix(label, label_words, columns)
     return {"code": "", "label": label, "reference": reference, "value": value}
 
 
+def _receipt_pairs_ending_in_money(
+    words: list[PdfWord], columns: _ReceiptColumns
+) -> list[dict[str, str]]:
+    ordered = sorted(words, key=lambda word: word.bbox.x0)
+    pairs = _pairs_ending_in_money(ordered)
+    if not pairs:
+        return pairs
+    first_money = next((index for index, word in enumerate(ordered) if _money(word)), len(ordered))
+    label_words = ordered[:first_money]
+    pairs[0]["label"] = _mark_receipt_prefix(
+        pairs[0]["label"], label_words, columns
+    )
+    return pairs
+
+
 def _labels_above_values(
-    label_words: list[PdfWord], value_words: list[PdfWord]
+    label_words: list[PdfWord],
+    value_words: list[PdfWord],
+    first_columns: _ReceiptColumns | None = None,
 ) -> list[dict[str, str]]:
     values = [(word, value) for word in value_words if (value := _money(word)) is not None]
     if not values:
@@ -700,6 +756,8 @@ def _labels_above_values(
         words = [word for word in label_words if left <= word.bbox.center_x < right]
         label = _clean_base_label(words)
         if label:
+            if index == 0 and first_columns is not None:
+                label = _mark_receipt_prefix(label, words, first_columns)
             pairs.append({"label": label, "value": value})
     return pairs
 
@@ -730,8 +788,8 @@ def _parse_receipt_block(
     )
 
     table_header_index: int | None = None
-    left_columns: tuple[float, float] | None = None
-    right_columns: tuple[float, float] | None = None
+    left_columns: _ReceiptColumns | None = None
+    right_columns: _ReceiptColumns | None = None
     table_right = page.width
     for index in range(section_header_index + 1, end):
         left_header = _zone_words(lines[index], 0, split_x)
@@ -767,16 +825,29 @@ def _parse_receipt_block(
     bases: list[dict[str, str]] = []
     if total_index is not None:
         total_line = lines[total_index]
-        bases.extend(_pairs_ending_in_money(_zone_words(total_line, 0, split_x)))
-        bases.extend(_pairs_ending_in_money(_zone_words(total_line, split_x, table_right)))
+        bases.extend(
+            _receipt_pairs_ending_in_money(
+                _zone_words(total_line, 0, split_x), left_columns
+            )
+        )
+        bases.extend(
+            _receipt_pairs_ending_in_money(
+                _zone_words(total_line, split_x, table_right), right_columns
+            )
+        )
 
         after_total = lines[total_index + 1 : end]
         liquid_position: int | None = None
         for position, line in enumerate(after_total):
             semantic = _line_semantic(line)
             if "liquido" in semantic and "receber" in semantic:
-                pairs = _pairs_ending_in_money(
-                    [word for word in _ordered_words(line) if word.bbox.center_x < table_right]
+                pairs = _receipt_pairs_ending_in_money(
+                    [
+                        word
+                        for word in _ordered_words(line)
+                        if word.bbox.center_x < table_right
+                    ],
+                    right_columns,
                 )
                 if pairs:
                     bases.append(pairs[0])
@@ -801,7 +872,9 @@ def _parse_receipt_block(
                     for word in _ordered_words(label_line)
                     if word.bbox.center_x < table_right
                 ]
-                bases.extend(_labels_above_values(labels, values))
+                bases.extend(
+                    _labels_above_values(labels, values, first_columns=left_columns)
+                )
                 break
 
     year, month = competence

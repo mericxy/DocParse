@@ -192,3 +192,13 @@ def test_real_scan_with_sparse_court_stamp_uses_ocr_and_deduplicates_vias():
         "value": "953,36",
     } in result[0]["fields"]
     assert all("TOTAL" not in field["label"] for field in result[0]["fields"])
+    labels = {field["label"] for field in result[0]["fields"]}
+    assert "SALARIO" in labels
+    assert "INSS MES" in labels
+    assert "?SR COMISSAO" in labels
+    assert "?ESC ASS MEDICA AMIL" in labels
+    assert "?EMUNERACAO VARIAVEL" in labels
+    assert "?ALE REFEICAO" in labels
+    base_labels = {base["label"] for base in result[0]["bases"]}
+    assert "?OTAL DE PROVENTOS" in base_labels
+    assert "?alário Base" in base_labels

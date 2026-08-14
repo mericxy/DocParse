@@ -5,8 +5,9 @@ from io import BytesIO, StringIO
 import json
 
 from openpyxl import load_workbook
+import pytest
 
-from backend.app.services.export import export_transcription
+from backend.app.services.export import AmbiguousPayrollExportError, export_transcription
 from backend.app.services.export.tables import build_cartao_table, build_holerite_table
 
 
@@ -87,6 +88,41 @@ def test_cartao_red_warning_wins_over_odd_or_uncertain_punch():
     assert build_cartao_table(value).warnings == ["none", "red"]
 
 
+def test_cartao_day_only_sequence_is_checked_only_inside_each_physical_page():
+    value = {
+        "pages": [
+            {
+                "page": 1,
+                "days": [
+                    {"date_raw": "01", "punches": []},
+                    {"date_raw": "02", "punches": []},
+                    {"date_raw": "03", "punches": []},
+                ],
+            },
+            {
+                "page": 2,
+                "days": [
+                    {"date_raw": "30", "punches": []},
+                    {"date_raw": "31", "punches": []},
+                ],
+            },
+            {"page": 3, "days": [{"date_raw": "01", "punches": []}]},
+        ]
+    }
+
+    assert build_cartao_table(value).warnings == [
+        "none",
+        "none",
+        "none",
+        "none",
+        "none",
+        "none",
+    ]
+
+    value["pages"][0]["days"][1]["date_raw"] = "03"
+    assert build_cartao_table(value).warnings[:3] == ["none", "red", "red"]
+
+
 def test_holerite_columns_follow_first_appearance_and_missing_field_is_empty():
     value = {
         "pages": [
@@ -125,6 +161,55 @@ def test_holerite_warnings_ignore_unreadable_competence_and_red_wins():
     table = build_holerite_table(value)
 
     assert table.warnings == ["none", "yellow", "none", "red"]
+
+
+def test_holerite_repeated_competences_are_additional_blocks_not_sequence_breaks():
+    value = {
+        "pages": [
+            _holerite_page(1, "2024", "08", fields=[_field("A", "1,00")]),
+            _holerite_page(1, "2024", "08", fields=[_field("B", "2,00")]),
+            _holerite_page(2, "2024", "09", fields=[_field("A", "3,00")]),
+            _holerite_page(2, "2024", "09", fields=[_field("B", "4,00")]),
+            _holerite_page(3, "2024", "10", fields=[_field("A", "5,00")]),
+            _holerite_page(4, "2024", "12", fields=[_field("A", "6,00")]),
+            _holerite_page(4, "2024", "12", fields=[_field("B", "7,00")]),
+            _holerite_page(5, "2025", "01", fields=[_field("A", "8,00")]),
+        ]
+    }
+
+    assert build_holerite_table(value).warnings == [
+        "none",
+        "none",
+        "none",
+        "none",
+        "none",
+        "red",
+        "none",
+        "none",
+    ]
+
+
+def test_holerite_csv_and_xlsx_refuse_duplicate_labels_in_one_logical_row():
+    value = {
+        "pages": [
+            _holerite_page(
+                2,
+                "2017",
+                "12",
+                fields=[
+                    _field("419 13º. Adto Desc", "100,00"),
+                    _field("419 13º. Adto Desc", "9.999,99"),
+                ],
+            )
+        ]
+    }
+
+    for formato in ("csv", "xlsx"):
+        with pytest.raises(AmbiguousPayrollExportError, match="label repetido"):
+            export_transcription("holerite", formato, value)
+
+    exported = export_transcription("holerite", "json", value)
+    assert json.loads(exported.content)["pages"][0]["fields"] == value["pages"][0]["fields"]
 
 
 def test_xlsx_uses_required_header_and_warning_styles():
