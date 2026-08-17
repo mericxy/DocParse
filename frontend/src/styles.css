@@ -88,9 +88,10 @@ button:disabled { cursor: not-allowed; opacity: 0.52; }
 .intro-panel > p { max-width: 590px; font-size: 18px; line-height: 1.7; color: #59667d; }
 .eyebrow { text-transform: uppercase; letter-spacing: .16em; font-size: 11px; font-weight: 800; color: #3d63a9; }
 
-.flow-list { list-style: none; padding: 0; margin: 36px 0 0; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-.flow-list li { display: flex; align-items: center; gap: 12px; font-weight: 600; color: #35425a; }
-.flow-list span { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid #ced8e8; border-radius: 50%; color: var(--navy); font-size: 11px; background: white; }
+.flow-list { list-style: none; max-width: 360px; padding: 0; margin: 36px 0 0; display: grid; gap: 0; }
+.flow-list li { min-height: 40px; display: flex; align-items: center; gap: 14px; color: #35425a; border-bottom: 1px solid #e2e7ee; font-weight: 600; }
+.flow-list li:first-child { border-top: 1px solid #e2e7ee; }
+.flow-list span { width: 24px; flex: none; color: var(--navy); font-size: 10px; font-variant-numeric: tabular-nums; }
 
 .upload-card, .pdf-panel, .transcription-panel, .processing-panel {
   background: var(--paper);
