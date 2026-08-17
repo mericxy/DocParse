@@ -7,9 +7,7 @@ interface WarningReasonsProps {
 
 export function WarningReasons({ warning, compact = false }: WarningReasonsProps) {
   if (!warning.reasons.length) {
-    return compact
-      ? <span className="no-warning" aria-label="Sem alerta">—</span>
-      : <span className="no-warning">Sem alerta</span>;
+    return <span className="no-warning" aria-label="Sem alerta">—</span>;
   }
   if (compact) {
     const description = warning.reasons.join("; ");

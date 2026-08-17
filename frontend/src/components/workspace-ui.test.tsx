@@ -72,6 +72,13 @@ it("exposes compact warning reasons on keyboard focus", async () => {
   expect(screen.getByRole("tooltip")).toHaveTextContent("Mês não sequencial");
 });
 
+it("keeps warning-free cells visually quiet", () => {
+  render(<WarningReasons warning={{ severity: "none", reasons: [] }} />);
+
+  expect(screen.queryByText("Sem alerta")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Sem alerta")).toHaveTextContent("—");
+});
+
 it("places document warnings as an icon beside the data panel actions", () => {
   const payrollValue: PayrollValue = {
     pages: [
