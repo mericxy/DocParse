@@ -55,8 +55,8 @@ export function UploadPanel({
           <div>
             <span className="eyebrow">Novo documento</span>
             <h2>Comece a transcrição</h2>
+            <small className="processing-note">Processamento local</small>
           </div>
-          <span className="secure-pill">OCR local</span>
         </div>
 
         <fieldset className="type-picker">

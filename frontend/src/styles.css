@@ -131,8 +131,8 @@ button:disabled { cursor: not-allowed; opacity: 0.52; }
 }
 .panel-action:hover { background: #f1f4f8; border-color: #aeb9c8; }
 .panel-action:focus-visible { outline: 3px solid rgba(69, 107, 176, .18); outline-offset: 1px; }
-.secure-pill, .file-pill { border-radius: 999px; padding: 4px 7px; font-size: 9px; font-weight: 700; white-space: nowrap; }
-.secure-pill { color: #087756; background: #dcf5ec; }
+.processing-note { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; }
+.file-pill { border-radius: 999px; padding: 4px 7px; font-size: 9px; font-weight: 700; white-space: nowrap; }
 .file-pill { color: #31528d; background: #eaf0fb; }
 
 .type-picker { border: 0; padding: 0; margin: 30px 0 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
