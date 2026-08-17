@@ -118,14 +118,14 @@ it("places document warnings as an icon beside the data panel actions", () => {
   expect(screen.getByRole("button", { name: "Baixar JSON" })).toBeEnabled();
 });
 
-it("uses the compact header and the requested author-only footer", () => {
+it("uses the compact header and the product footer", () => {
   const { container } = render(<App />);
 
   expect(container.querySelector(".brand-mark")).not.toBeInTheDocument();
-  expect(screen.queryByText("Processamento local")).not.toBeInTheDocument();
-  const author = screen.getByRole("link", { name: "Feito por mericxy" });
-  expect(author).toHaveAttribute("href", "https://github.com/mericxy");
-  expect(author).toHaveAttribute("target", "_blank");
-  expect(author).toHaveAttribute("rel", "noopener noreferrer");
-  expect(author.querySelector("svg")).toBeInTheDocument();
+  expect(screen.getByText("Processamento local")).toBeInTheDocument();
+  expect(screen.getByText("DocParse © 2026")).toBeInTheDocument();
+  const repository = screen.getByRole("link", { name: "Repositório" });
+  expect(repository).toHaveAttribute("href", "https://github.com/mericxy/DocParse");
+  expect(repository).toHaveAttribute("target", "_blank");
+  expect(repository).toHaveAttribute("rel", "noopener noreferrer");
 });
