@@ -26,7 +26,9 @@ it("keeps a day without punches visible and preserves raw while safely normalizi
   const onChange = vi.fn();
   render(<CardReview value={value} onChange={onChange} />);
 
-  expect(screen.getByLabelText("Data da página 1, linha 1")).toHaveValue("01/01/2025");
+  const firstDate = screen.getByLabelText("Data da página 1, linha 1");
+  expect(firstDate).toHaveValue("01/01/2025");
+  expect(firstDate.closest("tr")).toHaveClass("day-row", "day-row-odd");
   for (const addButton of screen.getAllByRole("button", { name: "+ adicionar" })) {
     expect(addButton).toHaveClass("cell-input", "time-input", "empty-time-input");
   }

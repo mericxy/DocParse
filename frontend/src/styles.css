@@ -264,6 +264,8 @@ button:disabled { cursor: not-allowed; opacity: 0.52; }
 .review-table { border-collapse: separate; border-spacing: 0; min-width: 100%; font-size: 12px; }
 .review-table th { position: sticky; top: 0; z-index: 3; color: white; background: var(--navy); padding: 12px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .065em; white-space: nowrap; }
 .review-table td { padding: 9px; border-right: 1px solid #e5e9ef; border-bottom: 1px solid #e5e9ef; background: white; vertical-align: top; min-width: 115px; }
+.card-table .day-row td { border-bottom-color: #d9e0e8; }
+.card-table .day-row-even.warning-none td { background: #f7f9fc; }
 .review-table tr.warning-yellow td { background: var(--yellow); }
 .review-table tr.warning-red td { background: var(--red); }
 .review-table tr.warning-red .first-data-cell { border-left: 4px solid var(--red-border); }

@@ -99,7 +99,7 @@ export function CardReview({ value, onChange }: CardReviewProps) {
                   page={row.page}
                   colSpan={punchCount + 3}
                 >
-                  <tr className={`warning-${row.warning.severity}`}>
+                  <tr className={`day-row day-row-${rowIndex % 2 === 0 ? "odd" : "even"} warning-${row.warning.severity}`}>
                     <td className="first-data-cell">
                       <input
                         aria-label={`Data da página ${row.page}, linha ${row.dayIndex + 1}`}
