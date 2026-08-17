@@ -128,8 +128,8 @@ export function CardReview({ value, onChange }: CardReviewProps) {
                       if (punchIndex === row.day.punches.length) {
                         return (
                           <td key={punchIndex}>
-                            <button className="inline-add" type="button" onClick={() => addPunch(row.pageIndex, row.dayIndex)}>
-                              + batida
+                            <button className="cell-input time-input empty-time-input" type="button" onClick={() => addPunch(row.pageIndex, row.dayIndex)}>
+                              + adicionar
                             </button>
                           </td>
                         );

@@ -27,6 +27,9 @@ it("keeps a day without punches visible and preserves raw while safely normalizi
   render(<CardReview value={value} onChange={onChange} />);
 
   expect(screen.getByLabelText("Data da página 1, linha 1")).toHaveValue("01/01/2025");
+  for (const addButton of screen.getAllByRole("button", { name: "+ adicionar" })) {
+    expect(addButton).toHaveClass("cell-input", "time-input", "empty-time-input");
+  }
   const input = screen.getByLabelText("Entrada 1 de 02/01/2025");
   fireEvent.change(input, { target: { value: "8:25" } });
 
