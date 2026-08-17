@@ -36,7 +36,7 @@ export function ReviewActions({
       <div className="download-group" aria-label="Formatos para download">
         {(["xlsx", "csv", "json"] as ExportFormat[]).map((format) => (
           <button
-            className={`toolbar-button download-button download-${format}`}
+            className="toolbar-button download-button"
             disabled={dirty || saving || downloading !== null}
             key={format}
             onClick={() => onDownload(format)}

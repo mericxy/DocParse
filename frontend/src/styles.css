@@ -249,14 +249,13 @@ button:disabled { cursor: not-allowed; opacity: 0.52; }
 }
 .download-button {
   border: 1px solid #cbd4df;
+  color: #33445f;
+  background: #ffffff;
   font-weight: 800;
   transition: .14s ease;
 }
-.download-button:hover:not(:disabled) { filter: brightness(.97); border-color: #9fabbc; }
+.download-button:hover:not(:disabled) { color: var(--navy); background: #f3f6fa; border-color: #9fabbc; }
 .download-button:focus-visible { outline: 3px solid rgba(69, 107, 176, .18); outline-offset: 1px; }
-.download-xlsx { color: #205b3d; background: #dff3e7; border-color: #a9d2ba; }
-.download-csv { color: #2d5278; background: #e1eef9; border-color: #afc9df; }
-.download-json { color: #5c4777; background: #eee5f6; border-color: #cbb8dc; }
 .transcription-body { flex: 1; min-height: 0; overflow: hidden; }
 .transcription-body > section { height: 100%; min-height: 0; display: flex; flex-direction: column; }
 .table-scroll { flex: 1; min-height: 0; overflow: auto; }
