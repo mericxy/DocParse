@@ -1,19 +1,36 @@
 :root {
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #172239;
-  background: #f2f5f9;
+  /* Design tokens */
+  --bg: #F7F6F2;          /* quase-branco quente, substitui #f2f5f9 e --paper/#ffffff */
+  --ink: #1A1B1E;          /* quase-preto */
+  --ink-muted: #5B5F66;   /* grafite para texto secundário, substitui --muted */
+  --border: #DDDAD3;       /* borda fina neutra, substitui --line */
+  --accent: #2B3A55;       /* azul-tinta escuro, substitui --navy e --navy-dark */
+  --surface: #FFFFFF;      /* superfície de card/panel (mais clara que --bg) */
+  --warning-bg: #FFF8EC;   /* fundo âmbar dessaturado, substitui --yellow vivo */
+  --warning-border: #D4A84B; /* borda âmbar dessaturada */
+  --warning-text: #7A5C1E; /* texto âmbar dessaturado */
+  --error-bg: #FDF0F1;     /* fundo erro dessaturado */
+  --error-border: #D9848A;
+  --error-text: #8D2731;
+  --mint-muted: #2E8B6A;   /* verde dessaturado p/ saved-dot */
+  --radius: 3px;           /* radius padrão pequeno */
+
+  /* Mantém variáveis antigas como aliases para não quebrar nada durante a transição */
+  --navy: var(--accent);
+  --navy-dark: var(--accent);
+  --muted: var(--ink-muted);
+  --line: var(--border);
+  --paper: var(--surface);
+  --yellow: var(--warning-bg);
+  --red: var(--error-bg);
+  --red-border: var(--error-border);
+  --mint: var(--mint-muted);
+
+  font-family: 'IBM Plex Sans', Inter, ui-sans-serif, system-ui, sans-serif;
+  color: var(--ink);
+  background: var(--bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --navy: #173772;
-  --navy-dark: #102750;
-  --ink: #172239;
-  --muted: #667085;
-  --line: #dce3ec;
-  --paper: #ffffff;
-  --yellow: #fff3cd;
-  --red: #f8d7da;
-  --red-border: #dc3545;
-  --mint: #17a67a;
 }
 
 * { box-sizing: border-box; }
