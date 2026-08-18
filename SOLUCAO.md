@@ -1,5 +1,10 @@
 # Solução
 
+## Links da entrega
+
+- Aplicação publicada: [https://docparse.meric.dev.br/](https://docparse.meric.dev.br/)
+- Repositório: [https://github.com/mericxy/docparse](https://github.com/mericxy/docparse)
+
 ## Estado atual
 
 O projeto usa um único pipeline de documentos com extratores específicos para
@@ -7,8 +12,9 @@ cartão de ponto e holerite. Estão implementados e testados a leitura híbrida 
 PDF, os dois extratores, a API FastAPI, a fila persistida em SQLite, o worker
 separado, a interface React de revisão, a correção do JSON e os downloads XLSX,
 CSV e JSON. O empacotamento Docker com frontend, backend e worker também está
-implementado e validado; a publicação em uma plataforma externa ainda depende
-da escolha do provedor e de credenciais do usuário.
+implementado e validado. A aplicação está publicada em servidor próprio e
+acessível pela internet por meio de um Cloudflare Tunnel operado com
+`cloudflared`.
 
 ## Como executar o que já está implementado
 
@@ -23,7 +29,7 @@ A interface fica em `http://localhost:8080`. `docker compose down` encerra os
 serviços preservando o volume; `docker compose down -v` também apaga banco e
 PDFs. O arquivo `.env.example` lista todas as opções do Compose.
 
-Requisitos de sistema:
+Para execução local sem Docker, os requisitos de sistema são:
 
 - Python 3;
 - Tesseract com os idiomas português e inglês para processar páginas sem texto
@@ -93,7 +99,7 @@ RETENTION_HOURS=24
 | Assíncrono | Worker Python separado e fila no SQLite | Implementado |
 | Exportação | openpyxl, CSV e JSON nativos | Implementado |
 | Frontend | React, TypeScript e Vite | Implementado |
-| Deploy | Docker Compose com frontend, backend e worker | Implementado localmente; publicação pendente |
+| Deploy | Servidor próprio, Docker Compose e Cloudflare Tunnel | Publicado e validado |
 
 PyMuPDF foi escolhido porque fornece texto, palavras, bounding boxes e OCR na
 mesma API. A escolha e as limitações do Tesseract estão detalhadas na seção de
@@ -153,17 +159,24 @@ proxy Nginx confirmou:
 
 ## Deploy
 
-Nenhuma plataforma está definida no repositório, portanto não foi criada uma
-configuração fictícia nem foram solicitadas credenciais. A plataforma escolhida
-precisa aceitar containers, um processo web e um worker, rede privada entre os
-serviços e um volume persistente montado simultaneamente nos dois processos
-Python. Uma plataforma que aceite Docker Compose diretamente é o encaixe mais
-simples.
+A aplicação está publicada em
+[https://docparse.meric.dev.br/](https://docparse.meric.dev.br/) em um servidor
+próprio. O frontend, o backend e o worker são executados pelo mesmo Docker
+Compose validado localmente. A entrada pública é fornecida por um Cloudflare
+Tunnel operado com `cloudflared`, que conecta o domínio à aplicação no servidor.
 
-SQLite e os PDFs dependem desse filesystem compartilhado. Plataformas com disco
-efêmero ou volumes isolados por instância podem perder jobs após restart ou
-impedir que o worker abra o PDF salvo pela API. Isso é uma limitação operacional
-real; esta fase não migra dados para PostgreSQL/S3 apenas para contorná-la.
+O deploy foi validado em 18 de agosto de 2026, inclusive por acesso sem sessão
+prévia. Foram conferidos o carregamento público da interface e o ciclo completo
+de upload, processamento pelo worker, revisão, salvamento e download. Backend e
+worker compartilham o volume persistente descrito na seção de Docker; banco,
+uploads e retenção usam a mesma configuração nos dois processos. Configurações
+operacionais permanecem em variáveis de ambiente e nenhum segredo é versionado.
+
+SQLite e os PDFs continuam dependendo do filesystem persistente desse servidor.
+Essa implantação atende ao escopo da demonstração, mas não oferece alta
+disponibilidade: uma indisponibilidade do host ou do túnel interrompe o acesso.
+Uma operação distribuída exigiria migrar banco e arquivos para serviços
+compartilhados, como PostgreSQL e armazenamento de objetos.
 
 ## Arquitetura do pipeline
 
@@ -536,9 +549,10 @@ oito PDFs de cartão de ponto e holerite presentes em `exemplos/`.
 Na validação integrada da Fase 5, `time-card-01`, `time-card-02`, `payroll-03`
 e `payroll-04` percorreram API e worker reais. Uma correção por PUT foi
 confirmada no GET, no JSON e no XLSX. O upload/polling também foi exercitado
-pelo proxy do Vite. O conector de navegador da sessão não inicializou; por isso
-a interface ainda precisa de auditoria visual independente em navegador real,
-especialmente para tabelas largas, viewer nativo de PDF e layout responsivo.
+pelo proxy do Vite. Em 18 de agosto de 2026, a aplicação publicada também passou
+por auditoria visual em navegador real. Landing page, tabelas largas, viewer
+nativo de PDF e comportamento responsivo foram conferidos sem problemas visuais
+pendentes.
 
 ## Limitações e cortes conscientes
 
@@ -571,12 +585,12 @@ diferentes, tabelas rotacionadas, manuscritos e imagens de baixa resolução sã
 o ponto mais frágil. Uma camada extensa de texto lixo ainda pode superar a
 heurística genérica e evitar OCR indevidamente.
 
-### Funcionalidades ainda fora desta fase
+### Disponibilidade do deploy
 
-O Docker Compose está implementado e validado localmente. Falta escolher uma
-plataforma compatível, fornecer credenciais e publicar/testar a URL em sessão
-anônima. API, fila, persistência, frontend de revisão, correção e exportação já
-estão implementados.
+O servidor próprio e o Cloudflare Tunnel não possuem redundância ou failover.
+Essa é uma decisão consciente para a demonstração: a URL é pública e o ciclo
+completo está operacional, mas sua disponibilidade ainda depende de um único
+host e da conexão do túnel.
 
 ### Retomada após refresh
 
