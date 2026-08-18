@@ -208,15 +208,46 @@ button:disabled { cursor: not-allowed; opacity: 0.52; }
 .file-pill { border-radius: 999px; padding: 4px 7px; font-size: 9px; font-weight: 700; white-space: nowrap; }
 .file-pill { color: #31528d; background: #eaf0fb; }
 
-.type-picker { border: 0; padding: 0; margin: 30px 0 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.type-picker legend { font-size: 13px; font-weight: 700; margin-bottom: 10px; color: #48556b; }
-.type-option { position: relative; min-height: 76px; border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: flex; align-items: center; gap: 11px; cursor: pointer; transition: .18s ease; }
-.type-option:hover { border-color: #98abd0; transform: translateY(-1px); }
-.type-option.selected { border-color: var(--navy); background: #f4f7fd; box-shadow: inset 0 0 0 1px var(--navy); }
+.type-picker {
+  border: 0;
+  padding: 0;
+  margin: 24px 0 18px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.type-picker legend {
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: var(--ink-muted);
+}
+.type-option {
+  position: relative;
+  min-height: 64px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease;
+  background: var(--surface);
+}
+.type-option:hover { border-color: var(--ink-muted); transform: none; }
+.type-option.selected {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: none;
+  color: #fff;
+}
+.type-option.selected strong { color: #fff; }
+.type-option.selected small { color: rgba(255,255,255,.72); }
 .type-option input { position: absolute; opacity: 0; pointer-events: none; }
 .type-option > span:last-child { display: grid; gap: 3px; }
-.type-option strong { font-size: 13px; }
-.type-option small { color: var(--muted); font-size: 11px; }
+.type-option strong { font-size: 13px; font-weight: 600; color: var(--ink); }
+.type-option small { color: var(--ink-muted); font-size: 11px; }
 
 .file-drop { border: 1.5px dashed #b7c3d5; border-radius: 15px; min-height: 106px; padding: 20px; display: flex; align-items: center; gap: 16px; cursor: pointer; background: #fafbfd; transition: .18s ease; }
 .file-drop:hover { border-color: var(--navy); background: #f5f8fd; }
