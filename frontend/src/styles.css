@@ -280,10 +280,76 @@ button:disabled { cursor: not-allowed; opacity: 0.52; }
 
 .example-divider { display: flex; align-items: center; gap: 10px; margin: 13px 0 9px; color: var(--ink-muted); font-size: 10px; text-transform: uppercase; letter-spacing: .1em; }
 .example-divider::before, .example-divider::after { content: ""; height: 1px; flex: 1; background: var(--border); }
-.example-picker { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
-.example-picker > summary { padding: 9px 11px; color: var(--accent); font-size: 12px; font-weight: 600; cursor: pointer; list-style-position: inside; }
-.example-picker[open] > summary { border-bottom: 1px solid var(--border); }
-.example-picker > summary:focus-visible { outline: 3px solid rgba(43,58,85,.25); outline-offset: 2px; border-radius: var(--radius); }
+/* "Testar com um exemplo" trigger button */
+.example-trigger {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .14s ease, background .14s ease;
+}
+.example-trigger:hover { border-color: var(--accent); background: var(--surface); }
+.example-trigger:focus-visible { outline: 3px solid rgba(43,58,85,.25); outline-offset: 2px; }
+
+/* Examples modal */
+.examples-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  margin: auto;
+  padding: 0;
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(520px, calc(100dvh - 48px));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 8px 32px rgba(0,0,0,.14);
+  overflow: hidden;
+}
+.examples-dialog::backdrop {
+  background: rgba(0,0,0,.35);
+}
+.examples-dialog-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: min(520px, calc(100dvh - 48px));
+}
+.examples-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+.examples-dialog-close {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color .12s ease, color .12s ease;
+}
+.examples-dialog-close:hover { border-color: var(--ink-muted); color: var(--ink); }
+.examples-dialog-close:focus-visible { outline: 3px solid rgba(43,58,85,.25); outline-offset: 2px; }
+.examples-dialog .example-groups {
+  padding: 12px 14px;
+  overflow-y: auto;
+  flex: 1;
+}
 .example-groups { padding: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .example-groups section { min-width: 0; }
 .example-groups h3 { margin: 0 0 6px; color: var(--ink-muted); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; font-weight: 500; }
