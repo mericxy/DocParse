@@ -105,8 +105,19 @@ button:disabled { cursor: not-allowed; opacity: 0.52; }
   color: var(--ink);
 }
 .intro-panel h1 { max-width: 22ch; text-wrap: balance; }
-.intro-panel > p { max-width: 590px; font-size: 18px; line-height: 1.7; color: #59667d; }
-.eyebrow { text-transform: uppercase; letter-spacing: .16em; font-size: 11px; font-weight: 800; color: #3d63a9; }
+.intro-panel > p {
+  max-width: 480px;
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--ink-muted);
+}
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: .16em;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-muted);
+}
 
 .flow-list { list-style: none; max-width: 360px; padding: 0; margin: 36px 0 0; display: grid; gap: 0; }
 .flow-list li { min-height: 40px; display: flex; align-items: center; gap: 14px; color: #35425a; border-bottom: 1px solid #e2e7ee; font-weight: 600; }
@@ -398,7 +409,6 @@ footer { min-height: 34px; display: flex; align-items: center; gap: 7px; padding
   .brand small { display: none; }
   .upload-shell { width: min(100% - 20px, 600px); padding: 16px 0; }
   .intro-panel h1 { font-size: 26px; }
-  .intro-panel > p { font-size: 16px; }
   .flow-list { grid-template-columns: 1fr; }
   .type-picker { grid-template-columns: 1fr; }
   .example-groups { grid-template-columns: 1fr; }
