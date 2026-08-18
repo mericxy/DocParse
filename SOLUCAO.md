@@ -4,6 +4,7 @@
 
 - Aplicação publicada: [https://docparse.meric.dev.br/](https://docparse.meric.dev.br/)
 - Repositório: [https://github.com/mericxy/docparse](https://github.com/mericxy/docparse)
+- Planilhas de exemplo geradas: [`exemplos/planilhas/`](exemplos/planilhas/)
 
 ## Estado atual
 
